@@ -27,6 +27,7 @@ rom/
 cfg/
 libs/
 obj/
+release*/
 .opk_data
 .od_data
 PicoDrive

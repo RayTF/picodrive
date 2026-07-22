@@ -44,6 +44,14 @@
 
 #define STATUS_MSG_TIMEOUT 2000
 
+#if defined(BRANDING_VECTORDRIVE)
+#define PSP_SAVE_DIR "VECTORDRIVE"
+#elif defined(BRANDING_SMDUC)
+#define PSP_SAVE_DIR "SMDUC"
+#else
+#define PSP_SAVE_DIR "SUGC"
+#endif
+
 void *g_screen_ptr;
 
 int g_screen_width  = 320;
@@ -856,7 +864,7 @@ char *emu_get_save_fname(int load, int is_sram, int slot, int *time)
 	{
 		strcpy(ext, (PicoIn.AHW & PAHW_MCD) ? ".brm" : ".srm");
 		romfname_ext(saveFname, sizeof(static_buff),
-			(PicoIn.AHW & PAHW_MCD) ? "ms0:/PSP/SAVEDATA/SUGC/brm"PATH_SEP : "ms0:/PSP/SAVEDATA/SUGC/srm"PATH_SEP, ext);
+			(PicoIn.AHW & PAHW_MCD) ? "ms0:/PSP/SAVEDATA/" PSP_SAVE_DIR "/brm"PATH_SEP : "ms0:/PSP/SAVEDATA/" PSP_SAVE_DIR "/srm"PATH_SEP, ext);
 		if (!load)
 			return saveFname;
 
@@ -1377,10 +1385,10 @@ void emu_init(void)
 
 	/* make dirs for saves */
 	pos = plat_get_root_dir(path, sizeof(path) - 4);
-	mkdir_path(path, pos, "ms0:/PSP/SAVEDATA/SUGC/mds");
-	mkdir_path(path, pos, "ms0:/PSP/SAVEDATA/SUGC/srm");
-	mkdir_path(path, pos, "ms0:/PSP/SAVEDATA/SUGC/brm");
-	mkdir_path(path, pos, "ms0:/PSP/SAVEDATA/SUGC/cfg");
+	mkdir_path(path, pos, "ms0:/PSP/SAVEDATA/" PSP_SAVE_DIR "/mds");
+	mkdir_path(path, pos, "ms0:/PSP/SAVEDATA/" PSP_SAVE_DIR "/srm");
+	mkdir_path(path, pos, "ms0:/PSP/SAVEDATA/" PSP_SAVE_DIR "/brm");
+	mkdir_path(path, pos, "ms0:/PSP/SAVEDATA/" PSP_SAVE_DIR "/cfg");
 
 	pprof_init();
 

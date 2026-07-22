@@ -406,15 +406,27 @@ endif
 ifeq "$(PLATFORM)" "psp"
 PSPSDK ?= $(shell psp-config --pspsdk-path)
 TARGET = PicoDrive
-PSP_EBOOT_TITLE = Sonic UGC
-PSP_EBOOT_ICON = platform/psp/data/icon.png
-PSP_EBOOT_PIC1 = platform/psp/skin/background_selector.png
+THEME ?= sugc
+
+ifeq "$(THEME)" "vectordrive"
+  PSP_EBOOT_TITLE = VectorDrive
+  PSP_BRANDING = -DBRANDING_VECTORDRIVE
+else ifeq "$(THEME)" "smduc"
+  PSP_EBOOT_TITLE = SEGA MDUC
+  PSP_BRANDING = -DBRANDING_SMDUC
+else
+  PSP_EBOOT_TITLE = Sonic UGC
+  PSP_BRANDING = -DBRANDING_SUGC
+endif
+
+PSP_EBOOT_ICON = platform/psp/themes/$(THEME)/icon.png
+PSP_EBOOT_PIC1 = platform/psp/themes/$(THEME)/background_selector.png
 PSP_EBOOT_SND0 = platform/psp/data/SND0.AT3
 
+CFLAGS += $(PSP_BRANDING)
 LIBS += -lpng -lm -lz -lpspgu -lpsppower -lpspaudio -lpsprtc -lpspaudiocodec
 EXTRA_TARGETS = EBOOT.PBP
 include $(PSPSDK)/lib/build.mak
-# TODO image generation
 endif
 
 pprof: platform/linux/pprof.c

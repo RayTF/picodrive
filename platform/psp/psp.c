@@ -30,13 +30,25 @@ extern int pico_main(int argc, char *argv[]);
 
 #ifndef FW15
 
+#if defined(BRANDING_VECTORDRIVE)
+PSP_MODULE_INFO("VectorDrive", 0, 1, 97);
+#elif defined(BRANDING_SMDUC)
+PSP_MODULE_INFO("SEGA MDUC", 0, 1, 97);
+#else
 PSP_MODULE_INFO("Sonic's UGC", 0, 1, 97);
+#endif
 
 int main(int argc, char *argv[]) { return pico_main(argc, argv); }	/* just a wrapper */
 
 #else
 
+#if defined(BRANDING_VECTORDRIVE)
+PSP_MODULE_INFO("VectorDrive", 0x1000, 1, 97);
+#elif defined(BRANDING_SMDUC)
+PSP_MODULE_INFO("SEGA MDUC", 0x1000, 1, 97);
+#else
 PSP_MODULE_INFO("Sonic's UGC", 0x1000, 1, 97);
+#endif
 PSP_MAIN_THREAD_ATTR(0);
 
 int main(int argc, char *argv[])
