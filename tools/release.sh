@@ -24,7 +24,9 @@ echo ""
 # Pull the PSP toolchain
 docker pull --platform=linux/amd64 pspdev/pspdev
 
-for theme in sugc smduc vectordrive; do
+themes="${2:-sugc smduc vectordrive}"
+
+for theme in $themes; do
 	echo "=== Building theme: $theme ==="
 
 	docker run --platform=linux/amd64 -i -v"$PWD":/home/picodrive -w/home/picodrive --rm pspdev/pspdev sh <<EOF

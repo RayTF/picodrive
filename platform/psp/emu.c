@@ -24,6 +24,7 @@
 #include "mp3.h"
 #include "in_psp.h"
 #include "asm_utils.h"
+#include "../common/bgm.h"
 #include "../common/emu.h"
 #include "../common/input_pico.h"
 #include "platform/libpicofe/input.h"
@@ -594,6 +595,8 @@ void pemu_sound_start(void)
 	static int mp3_init_done;
 	int ret, stereo, factor;
 
+	bgm_stop();
+
 	samples_made = samples_done = 0;
 
 	if (!(currentConfig.EmuOpt & EOPT_EN_SOUND))
@@ -684,7 +687,7 @@ void pemu_prep_defconfig(void)
 	defaultConfig.vscaling = EOPT_VSCALE_FULL;
 	defaultConfig.renderer = RT_8BIT_ACC;
 	defaultConfig.renderer32x = RT_8BIT_FAST;
-	defaultConfig.EmuOpt |= EOPT_SHOW_RTC;
+	defaultConfig.EmuOpt |= EOPT_SHOW_RTC | EOPT_EN_MENUBGM;
 }
 
 /* check configuration for inconsistencies */
@@ -740,12 +743,14 @@ void plat_init(void)
 	in_psp_init(in_psp_defbinds);
 	in_probe();
 	sound_init();
+	bgm_init();
 	plat_get_data_dir(rom_fname_loaded, sizeof(rom_fname_loaded));
 }
 
 /* platform dependend emulator deinitialization */
 void plat_finish(void)
 {
+	bgm_exit();
 	sound_deinit();
 }
 

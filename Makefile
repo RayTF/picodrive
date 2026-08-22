@@ -228,7 +228,7 @@ PLATFORM_MP3 ?= 1
 endif
 ifeq "$(PLATFORM)" "psp"
 CFLAGS += -DUSE_BGR565 -G8 # -DLPRINTF_STDIO -DFW15
-LDLIBS += -lpspgu -lpspge -lpsppower -lpspaudio -lpspdisplay -lpspaudiocodec
+LDLIBS += -lpspgu -lpspge -lpsppower -lpspaudio -lpspdisplay -lpspaudiocodec -lpspmp3
 LDLIBS += -lpspctrl
 platform/common/main.o: CFLAGS += -Dmain=pico_main
 OBJS += platform/psp/plat.o
@@ -237,6 +237,7 @@ OBJS += platform/psp/in_psp.o
 OBJS += platform/psp/psp.o
 OBJS += platform/psp/asm_utils.o
 OBJS += platform/psp/mp3.o
+OBJS += platform/psp/bgm.o
 USE_FRONTEND = 1
 endif
 ifeq "$(PLATFORM)" "ps2"
@@ -424,7 +425,8 @@ PSP_EBOOT_PIC1 = platform/psp/themes/$(THEME)/background_selector.png
 PSP_EBOOT_SND0 = platform/psp/data/SND0.AT3
 
 CFLAGS += $(PSP_BRANDING)
-LIBS += -lpng -lm -lz -lpspgu -lpsppower -lpspaudio -lpsprtc -lpspaudiocodec
+LIBS += -lpng -lm -lz -lpspgu -lpsppower -lpspaudio -lpsprtc -lpspaudiocodec -lpspmp3
+BUILD_PRX = 1
 EXTRA_TARGETS = EBOOT.PBP
 include $(PSPSDK)/lib/build.mak
 endif

@@ -23,6 +23,7 @@
 #include "emu.h"
 
 #include <pico/pico_int.h>
+#include "../common/bgm.h"
 #include "../common/emu.h"
 #include "../common/version.h"
 
@@ -37,6 +38,8 @@ PSP_MODULE_INFO("SEGA MDUC", 0, 1, 97);
 #else
 PSP_MODULE_INFO("Sonic's UGC", 0, 1, 97);
 #endif
+PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER);
+PSP_HEAP_SIZE_KB(-2048);
 
 int main(int argc, char *argv[]) { return pico_main(argc, argv); }	/* just a wrapper */
 
@@ -98,6 +101,7 @@ static int power_callback(int unknown, int pwrflags, void *common)
 	/* check for power switch and suspending as one is manual and the other automatic */
 	if (pwrflags & PSP_POWER_CB_POWER_SWITCH || pwrflags & PSP_POWER_CB_SUSPENDING || pwrflags & PSP_POWER_CB_STANDBY)
 	{
+		bgm_on_suspend();
 		psp_unhandled_suspend = 1;
 		if (engineState != PGS_Suspending)
 			engineStateSuspend = engineState;
@@ -106,6 +110,7 @@ static int power_callback(int unknown, int pwrflags, void *common)
 	else if (pwrflags & PSP_POWER_CB_RESUME_COMPLETE)
 	{
 		engineState = PGS_SuspendWake;
+		bgm_on_resume();
 	}
 
 	//sceDisplayWaitVblankStart();

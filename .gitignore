@@ -2,6 +2,7 @@
 *.swp
 *.SFO
 *.PBP
+*.prx
 *.dll
 *.lib
 *.pdb
@@ -19,6 +20,7 @@ cpu/musashi/m68kmake
 cpu/musashi/m68kops.c
 cpu/musashi/m68kops.h
 config.cfg
+log.txt
 skin
 srm/
 brm/

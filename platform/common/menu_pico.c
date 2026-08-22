@@ -11,6 +11,7 @@
 #include <time.h>
 
 #include "emu.h"
+#include "bgm.h"
 #include "menu_pico.h"
 #include "input_pico.h"
 #include "version.h"
@@ -739,10 +740,12 @@ static const char h_quality[] = "native: Mega Drive FM hardware rate (~53000Hz),
 				"best quality, but may not work on some devices";
 static const char h_lowpass[] = "Low pass filter for sound closer to real hardware";
 static const char h_lpalpha[] = "Higher values have more impact";
+static const char h_menubgm[] = "Background music in menus (Retro Dreams)";
 
 static menu_entry e_menu_snd_options[] =
 {
 	mee_onoff_h   ("Enable sound",    MA_OPT_ENABLE_SOUND,  currentConfig.EmuOpt, EOPT_EN_SOUND, h_ensound),
+	mee_onoff_h   ("Menu BGM",        MA_OPT_MENU_BGM,      currentConfig.EmuOpt, EOPT_EN_MENUBGM, h_menubgm),
 	mee_cust_h    ("Sound quality",   MA_OPT_SOUND_QUALITY, mh_opt_snd, mgn_opt_sound, h_quality),
 	mee_onoff_h   ("Sound filter",    MA_OPT_SOUND_FILTER,  PicoIn.opt, POPT_EN_SNDFILTER, h_lowpass),
 	mee_cust_h    ("Filter strength", MA_OPT_SOUND_ALPHA,   mh_opt_alpha, mgn_opt_alpha, h_lpalpha),
@@ -752,10 +755,22 @@ static menu_entry e_menu_snd_options[] =
 static int menu_loop_snd_options(int id, int keys)
 {
 	static int sel = 0;
+	int old_bgm = currentConfig.EmuOpt & EOPT_EN_MENUBGM;
 
 	if (PicoIn.sndRate > 52000 && PicoIn.sndRate < 54000)
 		PicoIn.sndRate = 53000;
 	me_loop_d(e_menu_snd_options, &sel, menu_draw_prep, NULL);
+
+	if ((currentConfig.EmuOpt & EOPT_EN_MENUBGM) != old_bgm) {
+		if (currentConfig.EmuOpt & EOPT_EN_MENUBGM) {
+			char buff[256];
+			int pos = plat_get_skin_dir(buff, sizeof(buff));
+			strcpy(buff + pos, "retro_dreams.mp3");
+			bgm_play(buff);
+		} else {
+			bgm_stop();
+		}
+	}
 
 	return 0;
 }
@@ -1419,6 +1434,18 @@ void menu_loop(void)
 	me_enable(e_menu_main, MA_OPT_SAVECFG_GAME, PicoGameLoaded);
 	me_enable(e_menu_main, MA_OPT_LOADCFG,      PicoGameLoaded && config_slot != config_slot_current);
 
+	lprintf("menu_loop: enter, EmuOpt=0x%08X (MENUBGM=%d)\n",
+		currentConfig.EmuOpt, !!(currentConfig.EmuOpt & EOPT_EN_MENUBGM));
+
+	if (currentConfig.EmuOpt & EOPT_EN_MENUBGM) {
+		char buff[256];
+		int pos = plat_get_skin_dir(buff, sizeof(buff));
+		strcpy(buff + pos, "retro_dreams.mp3");
+		lprintf("menu_loop: calling bgm_play('%s')\n", buff);
+		int ret = bgm_play(buff);
+		lprintf("menu_loop: bgm_play returned %d\n", ret);
+	}
+
 	menu_enter(PicoGameLoaded);
 	in_set_config_int(0, IN_CFG_BLOCKING, 1);
 	me_loop_d(e_menu_main, &sel, menu_draw_prep_selector, menu_main_draw_status);
@@ -1429,6 +1456,11 @@ void menu_loop(void)
 		/* wait until menu, ok, back is released */
 		while (in_menu_wait_any(NULL, 50) & (PBTN_MENU|PBTN_MOK|PBTN_MBACK))
 			;
+	}
+
+	if (engineState == PGS_Running || engineState == PGS_ReloadRom || engineState == PGS_RestartRun) {
+		lprintf("menu_loop: exiting menu to run emulation, stopping BGM\n");
+		bgm_stop();
 	}
 
 	in_set_config_int(0, IN_CFG_BLOCKING, 0);
@@ -1471,10 +1503,19 @@ int menu_loop_tray(void)
 {
 	int ret = 1, sel = 0;
 
+	if (currentConfig.EmuOpt & EOPT_EN_MENUBGM) {
+		char buff[256];
+		int pos = plat_get_skin_dir(buff, sizeof(buff));
+		strcpy(buff + pos, "retro_dreams.mp3");
+		bgm_play(buff);
+	}
+
 	menu_enter(PicoGameLoaded);
 
 	in_set_config_int(0, IN_CFG_BLOCKING, 1);
 	me_loop_d(e_menu_tray, &sel, menu_draw_prep, NULL);
+
+	bgm_stop();
 
 	if (engineState != PGS_RestartRun) {
 		engineState = PGS_RestartRun;
