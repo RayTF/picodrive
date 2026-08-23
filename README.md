@@ -24,9 +24,8 @@ Soon!
 | ✅ (M3)  | Retro Dreams BGM      | 100%     |
 | ✅ (M3)  | Theme Switching       | 100%     |
 | ✅ (M4)  | ROM Selector UI       | 100%     |
-| ❌ (M5)  | ROM Metadata UI       | 0%       |
-| ❌ (M6)  | Rating System         | 0%       |
-| ❓ (V1)  | Customizer Tool       | 0%       |
+| ✅ (M5)  | ROM Metadata UI       | 100%     |
+| ✳️ (V1)  | Customizer Tool       | 0%       |
 
 ### Q&A
 

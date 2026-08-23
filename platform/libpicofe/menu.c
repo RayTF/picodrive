@@ -100,6 +100,43 @@ void menu_draw_frame(int x, int y, int w, int h, unsigned short color)
 	menu_draw_rect(x + w - 1, y, 1, h, color);
 }
 
+#ifdef __PSP__
+static void menu_draw_image(int x, int y, int w, int h,
+	const unsigned short *src, int src_pitch)
+{
+	unsigned short *dst;
+	int row;
+
+	if (src == NULL || src_pitch < w || w <= 0 || h <= 0)
+		return;
+	if (x >= g_menuscreen_w || y >= g_menuscreen_h ||
+		(long long)x + w <= 0 || (long long)y + h <= 0)
+		return;
+	if (x < 0) {
+		src -= x;
+		w += x;
+		x = 0;
+	}
+	if (y < 0) {
+		src -= y * src_pitch;
+		h += y;
+		y = 0;
+	}
+	if (x + w > g_menuscreen_w)
+		w = g_menuscreen_w - x;
+	if (y + h > g_menuscreen_h)
+		h = g_menuscreen_h - y;
+	if (w <= 0 || h <= 0)
+		return;
+	dst = (unsigned short *)g_menuscreen_ptr + y * g_menuscreen_pp + x;
+	for (row = 0; row < h; row++) {
+		memcpy(dst, src, w * sizeof(*src));
+		dst += g_menuscreen_pp;
+		src += src_pitch;
+	}
+}
+#endif
+
 // draws text to current bbp16 screen
 static void text_out16_(int x, int y, const char *text, int color)
 {
@@ -891,6 +928,47 @@ static void do_delete(const char *fpath, const char *fname)
 // -------------- ROM selector --------------
 
 static const char **filter_exts_internal;
+static const char *romsel_sort_dir;
+
+enum romsel_sort_mode {
+	ROMSEL_SORT_ALPHABETICAL = 0,
+	ROMSEL_SORT_YEAR,
+	ROMSEL_SORT_GENRE,
+	ROMSEL_SORT_RATING,
+	ROMSEL_SORT_COUNT
+};
+
+static int romsel_sort_mode;
+
+static const char * const romsel_sort_labels[ROMSEL_SORT_COUNT] = {
+	"Alphabetical", "Release Year", "Genre", "Rating"
+};
+
+#ifdef __PSP__
+#define ROMSEL_ART_WIDTH 122
+#define ROMSEL_ART_HEIGHT 84
+static unsigned short romsel_artwork[ROMSEL_ART_WIDTH * ROMSEL_ART_HEIGHT];
+static char romsel_artwork_path[GAME_METADATA_ART_MAX];
+static int romsel_artwork_state;
+
+static int romsel_load_artwork(const game_metadata *metadata)
+{
+	const char *path = metadata != NULL ? metadata->thumbnail : "";
+
+	if (strcmp(path, romsel_artwork_path) == 0)
+		return romsel_artwork_state;
+	snprintf(romsel_artwork_path, sizeof(romsel_artwork_path), "%s", path);
+	romsel_artwork_state = 0;
+	if (*path == 0)
+		return 0;
+	if (readpng_rgb565_exact(romsel_artwork, ROMSEL_ART_WIDTH, path,
+			ROMSEL_ART_WIDTH, ROMSEL_ART_HEIGHT) == 0)
+		romsel_artwork_state = 1;
+	else
+		romsel_artwork_state = -1;
+	return romsel_artwork_state;
+}
+#endif
 
 static int romsel_has_extension(const char *name, const char **extensions)
 {
@@ -916,8 +994,213 @@ static void romsel_display_name(char *dst, int dst_size, const char *name)
 		*ext = 0;
 }
 
+static void romsel_entry_title(char *dst, int dst_size, const char *curdir,
+	const struct dirent *entry)
+{
+	const game_metadata *metadata = NULL;
+
+	if (entry->d_type == DT_REG)
+		metadata = game_metadata_find_file(curdir, entry->d_name);
+	if (metadata != NULL && metadata->title[0] != 0)
+		snprintf(dst, dst_size, "%s", metadata->title);
+	else
+		romsel_display_name(dst, dst_size, entry->d_name);
+}
+static void romsel_truncate(char *dst, int dst_size, const char *text,
+	int max_chars)
+{
+	int length;
+
+	if (dst_size <= 0)
+		return;
+	if (max_chars >= dst_size)
+		max_chars = dst_size - 1;
+	if (text == NULL)
+		dst[0] = 0;
+	else if (dst != text)
+		snprintf(dst, dst_size, "%s", text);
+	length = strlen(dst);
+	if (length <= max_chars)
+		return;
+	dst[max_chars] = 0;
+	if (max_chars >= 3)
+		memcpy(dst + max_chars - 3, "...", 3);
+}
+
+#ifdef __PSP__
+#define ROMSEL_TITLE_CHARS 24
+#define ROMSEL_MARQUEE_DELAY 750
+#define ROMSEL_MARQUEE_STEP 120
+#define ROMSEL_MARQUEE_END_DELAY 750
+
+static void romsel_marquee(char *dst, int dst_size, const char *title,
+	unsigned int elapsed)
+{
+	char looped[GAME_METADATA_TITLE_MAX * 2 + 4];
+	int length = strlen(title);
+	int max_offset = length - ROMSEL_TITLE_CHARS;
+	int offset = 0;
+	unsigned int scroll_time;
+	unsigned int cycle_time;
+
+	if (length <= ROMSEL_TITLE_CHARS) {
+		snprintf(dst, dst_size, "%s", title);
+		return;
+	}
+
+	scroll_time = max_offset * ROMSEL_MARQUEE_STEP;
+	cycle_time = ROMSEL_MARQUEE_DELAY + scroll_time +
+		ROMSEL_MARQUEE_END_DELAY +
+		(ROMSEL_TITLE_CHARS + 3) * ROMSEL_MARQUEE_STEP;
+	elapsed %= cycle_time;
+	if (elapsed >= ROMSEL_MARQUEE_DELAY) {
+		elapsed -= ROMSEL_MARQUEE_DELAY;
+		if (elapsed < scroll_time)
+			offset = elapsed / ROMSEL_MARQUEE_STEP + 1;
+		else {
+			elapsed -= scroll_time;
+			offset = max_offset;
+			if (elapsed >= ROMSEL_MARQUEE_END_DELAY) {
+				elapsed -= ROMSEL_MARQUEE_END_DELAY;
+				offset += elapsed / ROMSEL_MARQUEE_STEP + 1;
+			}
+		}
+	}
+
+	snprintf(looped, sizeof(looped), "%s   %s", title, title);
+	snprintf(dst, dst_size, "%.*s", ROMSEL_TITLE_CHARS, looped + offset);
+}
+#endif
+
+#ifdef __PSP__
+#define ROMSEL_INFO_LINES 9
+#define ROMSEL_INFO_CHARS 64
+#define ROMSEL_INFO_PAGES 16
+
+static int romsel_metadata_has_error(void)
+{
+	switch (game_metadata_get_status()) {
+	case GAME_METADATA_INVALID:
+	case GAME_METADATA_UNSUPPORTED:
+	case GAME_METADATA_IO_ERROR:
+	case GAME_METADATA_OUT_OF_MEMORY:
+		return 1;
+	default:
+		return 0;
+	}
+}
+
+static int draw_rom_information(const char *curdir, const char *filename,
+	int information_offset, int page)
+{
+	const game_metadata *metadata = game_metadata_find_file(curdir, filename);
+	const char *information = "No information available.";
+	const char *information_heading = "INFORMATION";
+	const char *system_name;
+	unsigned short heading_color = PXMAKE(0xb8, 0xc0, 0xc8);
+	char title[64];
+	char system[40];
+	char genre[40];
+	char line[ROMSEL_INFO_CHARS + 1];
+	char value[32];
+	int next_offset = information_offset;
+	int i;
+
+	if (metadata != NULL && metadata->title[0] != 0)
+		romsel_truncate(title, sizeof(title), metadata->title, 46);
+	else {
+		romsel_display_name(title, sizeof(title), filename);
+		romsel_truncate(title, sizeof(title), title, 46);
+	}
+	system_name = game_metadata_system_label(metadata, filename);
+	romsel_truncate(system, sizeof(system), system_name, 28);
+	romsel_truncate(genre, sizeof(genre),
+		metadata != NULL && metadata->genre[0] != 0 ? metadata->genre : "--",
+		28);
+	if (metadata != NULL && metadata->information[0] != 0)
+		information = metadata->information;
+	else if (romsel_metadata_has_error()) {
+		information = game_metadata_get_error();
+		information_heading = "METADATA ERROR";
+		heading_color = PXMAKE(0xff, 0x70, 0x70);
+	}
+
+	menu_draw_begin(1, 1);
+	menu_draw_rect(28, 30, 424, 232, PXMAKE(0x07, 0x09, 0x0c));
+	menu_draw_frame(28, 30, 424, 232, PXMAKE(0x58, 0x60, 0x68));
+	smalltext_out16(44, 40, "GAME INFORMATION", PXMAKE(0xa8, 0xb0, 0xb8));
+	text_out16(44, 55, "%s", title);
+	menu_draw_rect(44, 72, 392, 1, PXMAKE(0x48, 0x50, 0x58));
+
+	smalltext_out16(44, 82, "SYSTEM:", PXMAKE(0xff, 0xff, 0xff));
+	smalltext_out16(96, 82, system, PXMAKE(0xc0, 0xc4, 0xc8));
+	if (metadata != NULL && metadata->release_year > 0)
+		snprintf(value, sizeof(value), "YEAR: %d", metadata->release_year);
+	else
+		snprintf(value, sizeof(value), "YEAR: ----");
+	smalltext_out16(306, 82, value, PXMAKE(0xc0, 0xc4, 0xc8));
+	smalltext_out16(44, 97, "GENRE:", PXMAKE(0xff, 0xff, 0xff));
+	smalltext_out16(96, 97, genre, PXMAKE(0xc0, 0xc4, 0xc8));
+	if (metadata != NULL && metadata->players > 0)
+		snprintf(value, sizeof(value), "PLAYERS: %d", metadata->players);
+	else
+		snprintf(value, sizeof(value), "PLAYERS: --");
+	smalltext_out16(306, 97, value, PXMAKE(0xc0, 0xc4, 0xc8));
+	if (metadata != NULL && metadata->rating >= 0)
+		snprintf(value, sizeof(value), "RATING: %d/100", metadata->rating);
+	else
+		snprintf(value, sizeof(value), "RATING: --");
+	smalltext_out16(44, 112, value, PXMAKE(0xc0, 0xc4, 0xc8));
+
+	smalltext_out16(44, 129, information_heading, heading_color);
+	for (i = 0; i < ROMSEL_INFO_LINES && information[next_offset] != 0; i++) {
+		next_offset = game_metadata_wrap_information_line(information,
+			next_offset, line, sizeof(line), ROMSEL_INFO_CHARS);
+		smalltext_out16(44, 143 + i * me_sfont_h, line,
+			PXMAKE(0xe0, 0xe4, 0xe8));
+	}
+	if (information[next_offset] == 0)
+		next_offset = -1;
+
+	smalltext_out16(44, 246, "CROSS Back", PXMAKE(0xff, 0xff, 0xff));
+	if (page > 0 || next_offset >= 0) {
+		snprintf(value, sizeof(value), "L/R Page %d", page + 1);
+		smalltext_out16(334, 246, value, PXMAKE(0xb8, 0xc0, 0xc8));
+	}
+	menu_draw_end();
+	return next_offset;
+}
+
+static void romsel_information_loop(const char *curdir, const char *filename)
+{
+	int page_offsets[ROMSEL_INFO_PAGES] = { 0 };
+	int next_offset;
+	int page = 0;
+	int input;
+
+	while (in_menu_wait_any(NULL, 50) &
+		(PBTN_MENU|PBTN_MBACK|PBTN_L|PBTN_R));
+	for (;;) {
+		next_offset = draw_rom_information(curdir, filename,
+			page_offsets[page], page);
+		input = in_menu_wait(PBTN_MBACK|PBTN_LEFT|PBTN_RIGHT|PBTN_L|PBTN_R,
+			NULL, 33);
+		if (input & PBTN_MBACK)
+			break;
+		if ((input & (PBTN_RIGHT|PBTN_R)) && next_offset >= 0 &&
+			page + 1 < ROMSEL_INFO_PAGES) {
+			page++;
+			page_offsets[page] = next_offset;
+		}
+		else if ((input & (PBTN_LEFT|PBTN_L)) && page > 0)
+			page--;
+	}
+	while (in_menu_wait_any(NULL, 50) & PBTN_MBACK);
+}
+#endif
+
 static void draw_dirlist(char *curdir, struct dirent **namelist,
-	int n, int sel, int show_help)
+	int n, int sel, int show_help, unsigned int title_scroll_elapsed)
 {
 	int max_cnt, start, i, x, pos;
 	void *darken_ptr;
@@ -929,9 +1212,15 @@ static void draw_dirlist(char *curdir, struct dirent **namelist,
 	const int list_y = 119;
 	const int line_h = 12;
 	const char *heading = romsel_extra_mode ? "EXTRA GAMES" : "MAIN MENU";
-	char display[64];
+	const game_metadata *selected_metadata = NULL;
+	int artwork_state;
+	char display[GAME_METADATA_TITLE_MAX];
+	char full_title[GAME_METADATA_TITLE_MAX];
+	char genre[GAME_METADATA_GENRE_MAX];
+	char system[24];
+	char year[24];
+	const char *sort_label = romsel_sort_labels[romsel_sort_mode];
 
-	(void)curdir;
 	(void)show_help;
 	start = sel - visible / 2;
 	if (start < 0)
@@ -948,7 +1237,8 @@ static void draw_dirlist(char *curdir, struct dirent **namelist,
 	menu_draw_rect(82, 103, 18, 12, PXMAKE(0x30, 0x32, 0x36));
 	menu_draw_frame(82, 103, 18, 12, PXMAKE(0x98, 0x9c, 0xa0));
 	smalltext_out16(88, 104, "L", PXMAKE(0xff, 0xff, 0xff));
-	smalltext_out16(110, 104, "Alphabetical", PXMAKE(0xff, 0xff, 0xff));
+	smalltext_out16(143 - strlen(sort_label) * me_sfont_w / 2, 104,
+		sort_label, PXMAKE(0xff, 0xff, 0xff));
 	menu_draw_rect(187, 103, 18, 12, PXMAKE(0x30, 0x32, 0x36));
 	menu_draw_frame(187, 103, 18, 12, PXMAKE(0x98, 0x9c, 0xa0));
 	smalltext_out16(193, 104, "R", PXMAKE(0xff, 0xff, 0xff));
@@ -958,8 +1248,13 @@ static void draw_dirlist(char *curdir, struct dirent **namelist,
 			"No games found", PXMAKE(0xa8, 0xb0, 0xb8));
 	for (i = start; i < n && i < start + visible; i++) {
 		pos = list_y + (i - start) * line_h;
-		romsel_display_name(display, sizeof(display), namelist[i]->d_name);
-		display[24] = 0;
+		romsel_entry_title(full_title, sizeof(full_title), curdir, namelist[i]);
+		if (i == sel && namelist[i]->d_type == DT_REG)
+			romsel_marquee(display, sizeof(display), full_title,
+				title_scroll_elapsed);
+		else
+			romsel_truncate(display, sizeof(display), full_title,
+				namelist[i]->d_type == DT_DIR ? 22 : ROMSEL_TITLE_CHARS);
 		if (i == sel)
 			menu_draw_rect(68, pos - 1, 148, 11, PXMAKE(0x70, 0x74, 0x72));
 		if (namelist[i]->d_type == DT_DIR) {
@@ -971,22 +1266,52 @@ static void draw_dirlist(char *curdir, struct dirent **namelist,
 				i == sel ? PXMAKE(0xff, 0xff, 0xff) : PXMAKE(0xa0, 0xa4, 0xa8));
 	}
 
-	smalltext_out16(87, 208, "Genre:", PXMAKE(0xff, 0xff, 0xff));
-	smalltext_out16(170, 208, "--", PXMAKE(0xc0, 0xc4, 0xc8));
+	if (n > 0 && namelist[sel]->d_type == DT_REG)
+		selected_metadata = game_metadata_find_file(curdir,
+			namelist[sel]->d_name);
+	romsel_truncate(genre, sizeof(genre),
+		selected_metadata != NULL && selected_metadata->genre[0] != 0 ?
+		selected_metadata->genre : "--", 19);
+	smalltext_out16(87, 208, "Genre: ", PXMAKE(0xff, 0xff, 0xff));
+	smalltext_out16(123, 208, genre, PXMAKE(0xc0, 0xc4, 0xc8));
+	if (romsel_metadata_has_error()) {
+		smalltext_out16(70, 229, "METADATA ERROR", PXMAKE(0xff, 0x70, 0x70));
+		if (game_metadata_get_error_line() > 0)
+			snprintf(buff, sizeof(buff), "%s, line %d",
+				game_metadata_status_name(game_metadata_get_status()),
+				game_metadata_get_error_line());
+		else
+			snprintf(buff, sizeof(buff), "%s",
+				game_metadata_status_name(game_metadata_get_status()));
+		smalltext_out16(70, 244, buff, PXMAKE(0xd0, 0x80, 0x80));
+	}
 
-	/* Console-shaped preview card; game artwork and metadata arrive in M5. */
+	/* Console-shaped preview card. */
 	menu_draw_rect(244, 80, 166, 128, PXMAKE(0x06, 0x08, 0x0b));
 	menu_draw_rect(239, 88, 176, 108, PXMAKE(0x06, 0x08, 0x0b));
 	menu_draw_frame(244, 80, 166, 128, PXMAKE(0x50, 0x56, 0x5c));
 	menu_draw_rect(261, 83, 132, 92, PXMAKE(0x02, 0x03, 0x05));
 	menu_draw_frame(261, 83, 132, 92, PXMAKE(0xa0, 0xa6, 0xaa));
 	menu_draw_rect(266, 87, 122, 84, PXMAKE(0x18, 0x32, 0x78));
-	if (n > 0) {
-		smalltext_out16(293, 123,
-			namelist[sel]->d_type == DT_DIR ? "GAME FOLDER" : "MEGA DRIVE",
+	artwork_state = romsel_load_artwork(selected_metadata);
+	if (artwork_state == 1)
+		menu_draw_image(266, 87, ROMSEL_ART_WIDTH, ROMSEL_ART_HEIGHT,
+			romsel_artwork, ROMSEL_ART_WIDTH);
+	else if (n > 0) {
+		const char *system_name = namelist[sel]->d_type == DT_DIR ?
+			"GAME FOLDER" : game_metadata_system_label(selected_metadata,
+				namelist[sel]->d_name);
+		romsel_truncate(system, sizeof(system), system_name, 20);
+		smalltext_out16(266 + (122 - strlen(system) * me_sfont_w) / 2, 123,
+			system,
 			PXMAKE(0xff, 0xff, 0xff));
 	}
-	smalltext_out16(249, 178, "16-BIT", PXMAKE(0xff, 0xff, 0xff));
+	if (selected_metadata != NULL && selected_metadata->release_year > 0)
+		snprintf(year, sizeof(year), "RELEASE YEAR: %d",
+			selected_metadata->release_year);
+	else
+		snprintf(year, sizeof(year), "RELEASE YEAR: ----");
+	smalltext_out16(249, 178, year, PXMAKE(0xff, 0xff, 0xff));
 	menu_draw_rect(247, 190, 160, 16, PXMAKE(0x12, 0x14, 0x17));
 	menu_draw_frame(247, 190, 160, 16, PXMAKE(0x48, 0x4c, 0x50));
 
@@ -1003,11 +1328,12 @@ static void draw_dirlist(char *curdir, struct dirent **namelist,
 	}
 	smalltext_out16(233, 237, "CIRCLE Start   D-PAD Select",
 		PXMAKE(0xff, 0xff, 0xff));
-	smalltext_out16(233, 253, "CROSS Back     L/R Page",
+	smalltext_out16(233, 253, "CROSS Back  SELECT Info  L/R Sort",
 		PXMAKE(0xb8, 0xc0, 0xc8));
 	menu_draw_end();
 	return;
 #endif
+	(void)title_scroll_elapsed;
 
 	max_cnt = g_menuscreen_h / me_sfont_h;
 	start = max_cnt / 2 - sel;
@@ -1065,22 +1391,66 @@ static int scandir_cmp(const void *p1, const void *p2)
 {
 	const struct dirent **d1 = (const struct dirent **)p1;
 	const struct dirent **d2 = (const struct dirent **)p2;
-	const char *p;
+	const game_metadata *metadata1 = NULL;
+	const game_metadata *metadata2 = NULL;
+	const char *name1 = (*d1)->d_name;
+	const char *name2 = (*d2)->d_name;
+	char title1[GAME_METADATA_TITLE_MAX];
+	char title2[GAME_METADATA_TITLE_MAX];
+	int has1, has2;
 	int ret;
-	if ((p = (*d1)->d_name)[0] == '.' && p[1] == '.' && p[2] == 0)
-		return -1;	// ".." first
-	if ((p = (*d2)->d_name)[0] == '.' && p[1] == '.' && p[2] == 0)
+	if (strcmp(name1, "..") == 0)
+		return strcmp(name2, "..") == 0 ? 0 : -1;
+	if (strcmp(name2, "..") == 0)
 		return 1;
-	if ((*d1)->d_type == (*d2)->d_type) {
-		ret = strcasecmp((*d1)->d_name, (*d2)->d_name);
-		return ret != 0 ? ret : strcmp((*d1)->d_name, (*d2)->d_name);
-	}
-	if ((*d1)->d_type == DT_DIR)
+	if ((*d1)->d_type == DT_DIR && (*d2)->d_type != DT_DIR)
 		return -1;	// directories before files/links
-	if ((*d2)->d_type == DT_DIR)
+	if ((*d2)->d_type == DT_DIR && (*d1)->d_type != DT_DIR)
 		return  1;
+	if ((*d1)->d_type != DT_DIR && romsel_sort_dir != NULL) {
+		metadata1 = game_metadata_find_file(romsel_sort_dir, (*d1)->d_name);
+		metadata2 = game_metadata_find_file(romsel_sort_dir, (*d2)->d_name);
+		if (romsel_sort_mode == ROMSEL_SORT_YEAR) {
+			has1 = metadata1 != NULL && metadata1->release_year > 0;
+			has2 = metadata2 != NULL && metadata2->release_year > 0;
+			if (has1 != has2)
+				return has1 ? -1 : 1;
+			if (has1 && metadata1->release_year != metadata2->release_year)
+				return metadata1->release_year > metadata2->release_year ? -1 : 1;
+		}
+		else if (romsel_sort_mode == ROMSEL_SORT_GENRE) {
+			has1 = metadata1 != NULL && metadata1->genre[0] != 0;
+			has2 = metadata2 != NULL && metadata2->genre[0] != 0;
+			if (has1 != has2)
+				return has1 ? -1 : 1;
+			if (has1) {
+				ret = strcasecmp(metadata1->genre, metadata2->genre);
+				if (ret == 0)
+					ret = strcmp(metadata1->genre, metadata2->genre);
+				if (ret != 0)
+					return ret;
+			}
+		}
+		else if (romsel_sort_mode == ROMSEL_SORT_RATING) {
+			has1 = metadata1 != NULL && metadata1->rating >= 0;
+			has2 = metadata2 != NULL && metadata2->rating >= 0;
+			if (has1 != has2)
+				return has1 ? -1 : 1;
+			if (has1 && metadata1->rating != metadata2->rating)
+				return metadata1->rating > metadata2->rating ? -1 : 1;
+		}
 
-	ret = strcasecmp((*d1)->d_name, (*d2)->d_name);
+		romsel_entry_title(title1, sizeof(title1), romsel_sort_dir, *d1);
+		romsel_entry_title(title2, sizeof(title2), romsel_sort_dir, *d2);
+		name1 = title1;
+		name2 = title2;
+	}
+
+	ret = strcasecmp(name1, name2);
+	if (ret == 0)
+		ret = strcmp(name1, name2);
+	if (ret == 0)
+		ret = strcasecmp((*d1)->d_name, (*d2)->d_name);
 	return ret != 0 ? ret : strcmp((*d1)->d_name, (*d2)->d_name);
 }
 
@@ -1103,17 +1473,26 @@ static int scandir_filter(const struct dirent *ent)
 	return g_menu_filter_off || romsel_has_extension(ent->d_name, filter);
 }
 
-static int dirent_seek_char(struct dirent **namelist, int len, int sel, char c)
+static int dirent_seek_char(const char *basedir, struct dirent **namelist,
+	int len, int sel, char c)
 {
 	int i;
 
 	for (i = sel + 1; ; i++) {
+		const game_metadata *metadata;
+		const char *name;
+
 		if (i >= len)
 			i = 0;
 		if (i == sel)
 			break;
 
-		if (tolower_simple(namelist[i]->d_name[0]) == c)
+		name = namelist[i]->d_name;
+		metadata = namelist[i]->d_type == DT_REG ?
+			game_metadata_find_file(basedir, namelist[i]->d_name) : NULL;
+		if (metadata != NULL && metadata->title[0] != 0)
+			name = metadata->title;
+		if (tolower_simple(name[0]) == c)
 			break;
 	}
 
@@ -1134,7 +1513,11 @@ static const char *menu_loop_romsel_d(char *curr_path, int len,
 	char *curr_path_restore = NULL;
 	const char *ret = NULL;
 	char cinp;
-	int r, i;
+	int r, i, old_sel;
+#ifdef __PSP__
+	unsigned int marquee_start, now, repeat_at = 0;
+	int raw_inp, held_inp = 0;
+#endif
 
 	filter_exts_internal = filter_exts;
 	sel_fname[0] = 0;
@@ -1159,6 +1542,7 @@ rescan:
 	}
 
 	filter = scandir_filter;
+	romsel_sort_dir = curr_path;
 
 	n = scandir(curr_path, &namelist, filter, (void *)scandir_cmp);
 	if (n < 0 || !namelist) {
@@ -1228,10 +1612,14 @@ rescan:
 		}
 	}
 
+#ifdef __PSP__
+	marquee_start = plat_get_ticks_ms();
+#endif
+
 	/* make sure action buttons are not pressed on entering menu */
 	if (draw_prep != NULL)
 		draw_prep();
-	draw_dirlist(curr_path, namelist, n, sel, show_help);
+	draw_dirlist(curr_path, namelist, n, sel, show_help, 0);
 	while (in_menu_wait_any(NULL, 50) &
 		(PBTN_MOK|PBTN_MBACK|PBTN_MENU|PBTN_MA2|PBTN_MA3))
 		;
@@ -1240,10 +1628,36 @@ rescan:
 	{
 		if (draw_prep != NULL)
 			draw_prep();
-		draw_dirlist(curr_path, namelist, n, sel, show_help);
+		old_sel = sel;
+#ifdef __PSP__
+		now = plat_get_ticks_ms();
+		draw_dirlist(curr_path, namelist, n, sel, show_help,
+			now - marquee_start);
+		raw_inp = in_menu_wait_any(&cinp, 50);
+		inp = 0;
+		now = plat_get_ticks_ms();
+		if (raw_inp != held_inp) {
+			inp = raw_inp & ~held_inp;
+			held_inp = raw_inp;
+			repeat_at = now + 450;
+		}
+		else if (raw_inp != 0 && (int)(now - repeat_at) >= 0) {
+			inp = raw_inp & (PBTN_UP|PBTN_DOWN|PBTN_LEFT|PBTN_RIGHT);
+			repeat_at = now + 33;
+		}
+#else
+		draw_dirlist(curr_path, namelist, n, sel, show_help, 0);
 		inp = in_menu_wait(PBTN_UP|PBTN_DOWN|PBTN_LEFT|PBTN_RIGHT
 			| PBTN_L|PBTN_R|PBTN_MA2|PBTN_MA3|PBTN_MOK|PBTN_MBACK
 			| PBTN_MENU|PBTN_CHAR, &cinp, 33);
+#endif
+#ifdef __PSP__
+		if (inp == PBTN_MENU && n > 0 && namelist[sel]->d_type == DT_REG) {
+			romsel_information_loop(curr_path, namelist[sel]->d_name);
+			marquee_start = plat_get_ticks_ms();
+			continue;
+		}
+#endif
 		if ((inp & (PBTN_MA2|PBTN_MA3)) && menu_action != NULL) {
 			if (menu_action(inp & (PBTN_MA2|PBTN_MA3)))
 				break;
@@ -1258,13 +1672,37 @@ rescan:
 			show_help = 2;
 			goto rescan;
 		}
+#ifdef __PSP__
+		if (inp & (PBTN_L|PBTN_R)) {
+			if (n > 0)
+				snprintf(sel_fname, sizeof(sel_fname), "%s",
+					namelist[sel]->d_name);
+			if (inp & PBTN_L)
+				romsel_sort_mode = (romsel_sort_mode + ROMSEL_SORT_COUNT - 1) %
+					ROMSEL_SORT_COUNT;
+			else
+				romsel_sort_mode = (romsel_sort_mode + 1) % ROMSEL_SORT_COUNT;
+			if (n > 1)
+				qsort(namelist, n, sizeof(namelist[0]), scandir_cmp);
+			for (i = 0; i < n; i++) {
+				if (strcmp(namelist[i]->d_name, sel_fname) == 0) {
+					sel = i;
+					break;
+				}
+			}
+			marquee_start = now;
+			continue;
+		}
+#endif
 		int last = n ? n-1 : 0;
 		if      (inp & PBTN_UP  )  { sel--;   if (sel < 0)   sel = last; }
 		else if (inp & PBTN_DOWN)  { sel++;   if (sel > n-1) sel = 0; }
 		else if (inp & PBTN_LEFT)  { sel-=10; if (sel < 0)   sel = 0; }
 		else if (inp & PBTN_RIGHT) { sel+=10; if (sel > n-1) sel = last; }
+#ifndef __PSP__
 		else if (inp & PBTN_L)     { sel-=24; if (sel < 0)   sel = 0; }
 		else if (inp & PBTN_R)     { sel+=24; if (sel > n-1) sel = last; }
+#endif
 
 		else if (n > 0 && ((inp & PBTN_MOK) || (inp & (PBTN_MENU|PBTN_MA2)) == (PBTN_MENU|PBTN_MA2)))
 		{
@@ -1318,8 +1756,13 @@ rescan:
 		}
 		else if (inp & PBTN_CHAR) {
 			// must be last
-			sel = dirent_seek_char(namelist, n, sel, cinp);
+			sel = dirent_seek_char(curr_path, namelist, n, sel, cinp);
 		}
+
+#ifdef __PSP__
+		if (sel != old_sel)
+			marquee_start = now;
+#endif
 
 		if (inp & PBTN_MBACK)
 			break;

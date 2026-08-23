@@ -12,6 +12,7 @@
 
 #include "emu.h"
 #include "bgm.h"
+#include "game_metadata.h"
 #include "menu_pico.h"
 #include "input_pico.h"
 #include "version.h"
@@ -1629,6 +1630,7 @@ void menu_init(void)
 	int i;
 
 	menu_init_base();
+	game_metadata_load("games.yaml");
 
 	i = 0;
 #if defined(_SVP_DRC) || defined(DRC_SH2)

@@ -16,6 +16,8 @@ extern "C" {
 #endif
 
 int readpng(void *dest, const char *fname, readpng_what what, int w, int h);
+int readpng_rgb565_exact(unsigned short *dest, int dest_pitch,
+	const char *fname, int width, int height);
 int writepng(const char *fname, unsigned short *src, int w, int h);
 
 #ifdef __cplusplus

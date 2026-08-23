@@ -27,6 +27,11 @@ brm/
 mds/
 rom/
 rom_extra/
+*.yaml
+*.json
+metadata/
+cache/
+tests
 cfg/
 libs/
 obj/

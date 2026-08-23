@@ -17,6 +17,121 @@
 #include "readpng.h"
 #include "lprintf.h"
 
+#define READPNG_EXACT_FILE_MAX (256 * 1024)
+
+int readpng_rgb565_exact(unsigned short *dest, int dest_pitch,
+	const char *fname, int width, int height)
+{
+	png_structp png_ptr = NULL;
+	png_infop info_ptr = NULL;
+	png_bytep volatile row = NULL;
+	volatile int ret = -1;
+	unsigned char signature[8];
+	int bit_depth, color_type;
+	int x, y;
+	long file_size;
+	FILE *file;
+
+	if (dest == NULL || fname == NULL || width <= 0 || height <= 0 ||
+		width > 1024 || height > 1024 || dest_pitch < width ||
+		dest_pitch > 4096)
+		return -1;
+	file = fopen(fname, "rb");
+	if (file == NULL) {
+		lprintf(__FILE__ ": failed to open exact image: %s\n", fname);
+		return -1;
+	}
+	if (fseek(file, 0, SEEK_END) != 0 || (file_size = ftell(file)) <= 0 ||
+		file_size > READPNG_EXACT_FILE_MAX || fseek(file, 0, SEEK_SET) != 0) {
+		lprintf(__FILE__ ": invalid exact image file size: %s\n", fname);
+		goto done;
+	}
+	if (fread(signature, 1, sizeof(signature), file) != sizeof(signature) ||
+		png_sig_cmp(signature, 0, sizeof(signature)) != 0) {
+		lprintf(__FILE__ ": invalid PNG signature: %s\n", fname);
+		goto done;
+	}
+
+	png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+	if (png_ptr == NULL)
+		goto done;
+	info_ptr = png_create_info_struct(png_ptr);
+	if (info_ptr == NULL)
+		goto done;
+	if (setjmp(png_jmpbuf(png_ptr)) != 0) {
+		lprintf(__FILE__ ": failed to decode exact image: %s\n", fname);
+		goto done;
+	}
+
+	png_init_io(png_ptr, file);
+	png_set_sig_bytes(png_ptr, sizeof(signature));
+	png_set_user_limits(png_ptr, width, height);
+	png_set_chunk_malloc_max(png_ptr, 64 * 1024);
+	png_set_chunk_cache_max(png_ptr, 32);
+	png_set_keep_unknown_chunks(png_ptr, PNG_HANDLE_CHUNK_NEVER, NULL, 0);
+	png_read_info(png_ptr, info_ptr);
+	if (png_get_image_width(png_ptr, info_ptr) != (png_uint_32)width ||
+		png_get_image_height(png_ptr, info_ptr) != (png_uint_32)height) {
+		lprintf(__FILE__ ": unexpected exact image size %ux%u, needed %dx%d: %s\n",
+			(unsigned int)png_get_image_width(png_ptr, info_ptr),
+			(unsigned int)png_get_image_height(png_ptr, info_ptr),
+			width, height, fname);
+		goto done;
+	}
+	if (png_get_interlace_type(png_ptr, info_ptr) != PNG_INTERLACE_NONE) {
+		lprintf(__FILE__ ": interlaced exact image is not supported: %s\n",
+			fname);
+		goto done;
+	}
+
+	bit_depth = png_get_bit_depth(png_ptr, info_ptr);
+	color_type = png_get_color_type(png_ptr, info_ptr);
+	if (bit_depth == 16)
+		png_set_strip_16(png_ptr);
+	if (color_type == PNG_COLOR_TYPE_PALETTE)
+		png_set_palette_to_rgb(png_ptr);
+	if (color_type == PNG_COLOR_TYPE_GRAY && bit_depth < 8)
+		png_set_expand_gray_1_2_4_to_8(png_ptr);
+	if (png_get_valid(png_ptr, info_ptr, PNG_INFO_tRNS))
+		png_set_tRNS_to_alpha(png_ptr);
+	if (color_type == PNG_COLOR_TYPE_GRAY ||
+		color_type == PNG_COLOR_TYPE_GRAY_ALPHA)
+		png_set_gray_to_rgb(png_ptr);
+	if ((color_type & PNG_COLOR_MASK_ALPHA) ||
+		png_get_valid(png_ptr, info_ptr, PNG_INFO_tRNS))
+		png_set_strip_alpha(png_ptr);
+	png_read_update_info(png_ptr, info_ptr);
+	if (png_get_bit_depth(png_ptr, info_ptr) != 8 ||
+		png_get_channels(png_ptr, info_ptr) != 3 ||
+		png_get_rowbytes(png_ptr, info_ptr) != (png_size_t)width * 3) {
+		lprintf(__FILE__ ": unsupported exact image format: %s\n", fname);
+		goto done;
+	}
+
+	row = malloc(width * 3);
+	if (row == NULL) {
+		lprintf(__FILE__ ": out of memory loading exact image: %s\n", fname);
+		goto done;
+	}
+	for (y = 0; y < height; y++) {
+		unsigned short *out = dest + y * dest_pitch;
+		png_bytep input = (png_bytep)row;
+
+		png_read_row(png_ptr, input, NULL);
+		for (x = 0; x < width; x++, input += 3)
+			out[x] = PXMAKE(input[0], input[1], input[2]);
+	}
+	png_read_end(png_ptr, NULL);
+	ret = 0;
+
+done:
+	free((void *)row);
+	if (png_ptr != NULL)
+		png_destroy_read_struct(&png_ptr, info_ptr ? &info_ptr : NULL, NULL);
+	fclose(file);
+	return ret;
+}
+
 int readpng(void *dest, const char *fname, readpng_what what, int req_w, int req_h)
 {
 	FILE *fp;
@@ -145,7 +260,7 @@ int readpng(void *dest, const char *fname, readpng_what what, int req_w, int req
 		{
 			int x, y, x1, y1;
 			unsigned char *dst = dest;
-			if (png_get_image_width(png_ptr, info_ptr) != req_w || png_get_image_height(png_ptr, info_ptr) != req_h)
+			if (png_get_image_width(png_ptr, info_ptr) != (png_uint_32)req_w || png_get_image_height(png_ptr, info_ptr) != (png_uint_32)req_h)
 			{
 				lprintf(__FILE__ ": unexpected font image size %dx%d, needed %dx%d\n",
 					(int)png_get_image_width(png_ptr, info_ptr), (int)png_get_image_height(png_ptr, info_ptr), req_w, req_h);
@@ -178,7 +293,7 @@ int readpng(void *dest, const char *fname, readpng_what what, int req_w, int req
 		{
 			int x1, y1;
 			unsigned char *dst = dest;
-			if (png_get_image_width(png_ptr, info_ptr) != req_w || png_get_image_height(png_ptr, info_ptr) != req_h)
+			if (png_get_image_width(png_ptr, info_ptr) != (png_uint_32)req_w || png_get_image_height(png_ptr, info_ptr) != (png_uint_32)req_h)
 			{
 				lprintf(__FILE__ ": unexpected selector image size %ix%i, needed %dx%d\n",
 					(int)png_get_image_width(png_ptr, info_ptr), (int)png_get_image_height(png_ptr, info_ptr), req_w, req_h);
@@ -306,4 +421,3 @@ end1:
 	fclose(f);
 	return ret;
 }
-

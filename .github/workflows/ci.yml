@@ -7,20 +7,23 @@ jobs:
     steps:
     - name: build environment
       run: |
-        apk add git gcc g++ zip
+        apk add --no-cache git gcc g++ zip build-base
     - uses: actions/checkout@v4
       with:
         submodules: true
     - name: build
       run: |
         export CROSS_COMPILE=psp-
-        git config --global --add safe.directory $PWD
+        git config --global --add safe.directory "$PWD"
         ver=$(cut -d'"' -f2 platform/common/version.h)-$(git rev-parse --short HEAD)
         ./configure --platform=psp
-        make -j$(getconf _NPROCESSORS_ONLN)
-        make -C platform/psp rel VER=$ver
+        mkdir "release-$ver"
+        for theme in sugc smduc vectordrive; do
+          make clean
+          make "THEME=$theme" -j"$(getconf _NPROCESSORS_ONLN)" all
+        done
     - name: artifacts
       uses: actions/upload-artifact@v4
       with:
         name: PSP
-        path: VectorDrive-*.zip
+        path: release-*/VectorDrive-*.zip

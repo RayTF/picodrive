@@ -280,7 +280,8 @@ ifeq "$(USE_FRONTEND)" "1"
 
 # common
 OBJS += platform/common/main.o platform/common/emu.o platform/common/upscale.o \
-	platform/common/menu_pico.o platform/common/config_file.o
+	platform/common/menu_pico.o platform/common/config_file.o \
+	platform/common/game_metadata.o
 
 # libpicofe
 OBJS += platform/libpicofe/input.o platform/libpicofe/readpng.o \
@@ -408,6 +409,7 @@ ifeq "$(PLATFORM)" "psp"
 PSPSDK ?= $(shell psp-config --pspsdk-path)
 TARGET = PicoDrive
 THEME ?= sugc
+.NOTPARALLEL: all
 
 ifeq "$(THEME)" "vectordrive"
   PSP_EBOOT_TITLE = VectorDrive

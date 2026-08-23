@@ -3,32 +3,62 @@
 # VectorDrive release build script
 # Builds all 3 theme variants (SUGC, SMDUC, VectorDrive) for PSP
 #
-# usage: release.sh <version>
+# usage: release.sh <version> <theme_optional>
 #
 # expects pspdev SDK toolchain:
 #   docker.io/pspdev/pspdev
 
-trap "exit" ERR
+set -euo pipefail
 
 rel=$1
-if [ -z "$rel" ]; then
-	echo "usage: release.sh <version> <theme>"
+image='pspdev/pspdev@latest'
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+source_root=$(dirname -- "$script_dir")
+
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+	printf 'usage: %s VERSION [sugc|smduc|vectordrive]\n' "$0" >&2
 	exit 1
 fi
 
-mkdir -p release-$rel
-
-echo "=== VectorDrive Release Build $rel ==="
-echo ""
+version=$1
+case "$version" in
+	''|*[!A-Za-z0-9._-]*|.*|-*)
+		printf 'error: unsafe release version: %s\n' "$version" >&2
+		exit 1
+		;;
+esac
 
 # Pull the PSP toolchain
 docker pull --platform=linux/amd64 pspdev/pspdev
+if [ "$#" -eq 2 ]; then
+	case "$2" in
+		sugc|smduc|vectordrive) themes=$2 ;;
+		*)
+			printf 'error: unsupported theme: %s\n' "$2" >&2
+			exit 1
+			;;
+	esac
+else
+	themes='sugc smduc vectordrive'
+fi
 
-themes="${2:-sugc smduc vectordrive}"
+release_dir="$source_root/release-$version"
+if [ -e "$release_dir" ]; then
+	printf 'error: release directory already exists: %s\n' "$release_dir" >&2
+	exit 1
+fi
+if git -C "$source_root" submodule status --recursive | grep -Eq '^[+-U]'; then
+	printf 'error: release builds require initialized recorded submodules\n' >&2
+	exit 1
+fi
+
+staging=$(mktemp -d "$source_root/.release-$version.XXXXXX")
+trap 'rm -rf "$staging"' EXIT
+
+printf '=== VectorDrive Release Build %s ===\n\n' "$version"
 
 for theme in $themes; do
-	echo "=== Building Theme: $theme ==="
-
+	printf '=== Building Theme: %s ===\n' "$theme"
 	docker run --platform=linux/amd64 -i -v"$PWD":/home/picodrive -w/home/picodrive --rm pspdev/pspdev sh <<EOF
 apk add git gcc g++ zip make &&
 export CROSS_COMPILE=psp- &&
@@ -67,6 +97,6 @@ EOF
 	echo ""
 done
 
-echo "=== All builds complete ==="
-echo "Output files in release-$rel/"
-ls -la release-$rel/
+mv "$staging" "$release_dir"
+trap - EXIT
+printf '=== All builds complete ===\nOutput files in %s/\n' "$release_dir"
