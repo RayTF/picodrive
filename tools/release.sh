@@ -12,13 +12,13 @@ trap "exit" ERR
 
 rel=$1
 if [ -z "$rel" ]; then
-	echo "usage: release.sh <version>"
+	echo "usage: release.sh <version> <theme>"
 	exit 1
 fi
 
 mkdir -p release-$rel
 
-echo "=== VectorDrive release build v$rel ==="
+echo "=== VectorDrive Release Build $rel ==="
 echo ""
 
 # Pull the PSP toolchain
@@ -27,7 +27,7 @@ docker pull --platform=linux/amd64 pspdev/pspdev
 themes="${2:-sugc smduc vectordrive}"
 
 for theme in $themes; do
-	echo "=== Building theme: $theme ==="
+	echo "=== Building Theme: $theme ==="
 
 	docker run --platform=linux/amd64 -i -v"$PWD":/home/picodrive -w/home/picodrive --rm pspdev/pspdev sh <<EOF
 apk add git gcc g++ zip make &&
@@ -37,6 +37,10 @@ git config --global --add safe.directory /home/picodrive &&
 make clean &&
 make THEME=$theme -j2 all
 EOF
+	# Keep the directly runnable EBOOT paired with the selected theme.
+	cp "platform/psp/themes/$theme/background.png" "skin/background.png"
+	cp "platform/psp/themes/$theme/background_selector.png" "skin/background_selector.png"
+	cp "platform/psp/themes/$theme/background_title.png" "skin/background_title.png"
 
 	# Package the result
 	pkg_name="VectorDrive-${theme}"
@@ -51,6 +55,7 @@ EOF
 	cp platform/psp/skin/* "release-$rel/$pkg_name/skin/"
 	cp "platform/psp/themes/$theme/background.png" "release-$rel/$pkg_name/skin/"
 	cp "platform/psp/themes/$theme/background_selector.png" "release-$rel/$pkg_name/skin/"
+	cp "platform/psp/themes/$theme/background_title.png" "release-$rel/$pkg_name/skin/"
 
 	# Create zip for this theme
 	cd "release-$rel"

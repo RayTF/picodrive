@@ -137,6 +137,7 @@ void  emu_loop(void);
 
 int   emu_reload_rom(const char *rom_fname_in);
 int   emu_swap_cd(const char *fname);
+void  emu_unload_game(void);
 int   emu_save_load_game(int load, int sram);
 void  emu_reset_game(void);
 
@@ -209,4 +210,3 @@ void plat_video_set_shadow(int w, int h);
 #ifdef __cplusplus
 } // extern "C"
 #endif
-

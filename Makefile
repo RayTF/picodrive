@@ -421,7 +421,7 @@ else
 endif
 
 PSP_EBOOT_ICON = platform/psp/themes/$(THEME)/icon.png
-PSP_EBOOT_PIC1 = platform/psp/themes/$(THEME)/background_selector.png
+PSP_EBOOT_PIC1 = platform/psp/themes/$(THEME)/background.png
 PSP_EBOOT_SND0 = platform/psp/data/SND0.AT3
 
 CFLAGS += $(PSP_BRANDING)

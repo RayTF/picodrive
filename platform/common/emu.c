@@ -58,7 +58,7 @@ int g_screen_width  = 320;
 int g_screen_height = 240;
 int g_screen_ppitch = 320; // pitch in pixels
 
-const char *PicoConfigFile = "config2.cfg";
+const char *PicoConfigFile = "config.cfg";
 currentConfig_t currentConfig, defaultConfig;
 int state_slot = 0;
 int config_slot = 0, config_slot_current = 0;
@@ -596,6 +596,27 @@ int emu_swap_cd(const char *fname)
 	rom_fname_loaded[sizeof(rom_fname_loaded) - 1] = 0;
 
 	return 1;
+}
+
+void emu_unload_game(void)
+{
+	if (!PicoGameLoaded)
+		return;
+
+	if ((currentConfig.EmuOpt & EOPT_EN_SRAM) && Pico.sv.changed) {
+		emu_save_load_game(0, 1);
+		Pico.sv.changed = 0;
+	}
+	PicoPatchUnload();
+	if (movie_data != NULL) {
+		free(movie_data);
+		movie_data = NULL;
+	}
+	if (PicoIn.AHW & PAHW_MCD)
+		cdd_unload();
+	PicoCartUnload();
+	PicoIn.AHW = 0;
+	plat_get_data_dir(rom_fname_loaded, sizeof(rom_fname_loaded));
 }
 
 // <base dir><end>

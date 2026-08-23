@@ -21,6 +21,7 @@
 #include <unistd.h>
 
 #include "../libpicofe/input.h"
+#include "../common/input_pico.h"
 #include "psp.h"
 #include "in_psp.h"
 
@@ -83,10 +84,13 @@ in_psp_get_key_names(const in_drv_t *drv, int *count)
 static int in_psp_update(void *drv_data, const int *binds, int *result)
 {
 	int type_start = 0;
+	int menu_pressed;
 	int i, t;
 	unsigned keys;
 
 	keys = in_psp_get_bits();
+	menu_pressed = keys & PSP_CTRL_SELECT;
+	keys &= ~PSP_CTRL_SELECT;
 
 	if (keys & in_psp_combo_keys) {
 		result[IN_BINDTYPE_EMU] = in_combos_do(keys, binds, IN_PSP_NBUTTONS,
@@ -101,6 +105,8 @@ static int in_psp_update(void *drv_data, const int *binds, int *result)
 		for (t = type_start; t < IN_BINDTYPE_COUNT; t++)
 			result[t] |= binds[IN_BIND_OFFS(i, t)];
 	}
+	if (menu_pressed)
+		result[IN_BINDTYPE_EMU] |= PEV_MENU;
 
 	return 0;
 }
@@ -142,6 +148,8 @@ static struct {
 	{ PSP_CTRL_SQUARE,	PBTN_MA3 },
 	{ PSP_CTRL_LTRIGGER,	PBTN_L },
 	{ PSP_CTRL_RTRIGGER,	PBTN_R },
+	{ PSP_CTRL_SELECT,	PBTN_MENU },
+	{ PSP_CTRL_START,	PBTN_MSTART },
 };
 
 #define KEY_PBTN_MAP_SIZE (sizeof(key_pbtn_map) / sizeof(key_pbtn_map[0]))
@@ -231,4 +239,3 @@ void in_psp_init(struct in_default_bind *defbinds)
 
 	in_register_driver(&in_psp_drv, defbinds, NULL);
 }
-

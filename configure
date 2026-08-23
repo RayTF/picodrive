@@ -211,7 +211,7 @@ if [ "x$sound_drivers" != "x" ]; then
 fi
 
 if ! test -f "platform/libpicofe/README"; then
-  fail "libpicofe is missing, please run 'git submodule update --init'"
+  fail "vendored libpicofe sources are missing from platform/libpicofe"
 fi
 
 #if [ "$need_warm" = "yes" ]; then

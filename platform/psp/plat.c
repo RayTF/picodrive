@@ -29,6 +29,9 @@
 
 #include <pico/pico_int.h>
 
+static unsigned short *menu_screen;
+static void *menu_vram;
+
 /* graphics buffer management in VRAM:
  * -	VRAM_FB0, VRAM_FB1	frame buffers
  * -	VRAM_DEPTH		Z buffer (unused)
@@ -57,6 +60,9 @@ int plat_target_init(void)
 	g_screen_ptr = VRAM_CACHED_STUFF + (psp_screen - VRAM_FB0);
 	g_menuscreen_ptr = psp_screen;
 	g_menubg_ptr = malloc(512*272*2);
+	menu_screen = memalign(64, 512*272*2);
+	if (g_menubg_ptr == NULL || menu_screen == NULL)
+		return -1;
 
 	return 0;
 }
@@ -101,20 +107,32 @@ void plat_video_wait_vsync(void)
 /* switch from emulation display to menu display */
 void plat_video_menu_enter(int is_rom_loaded)
 {
+	/* Finish the last GU frame before the CPU starts drawing the menu. */
+	sceGuSync(0, 0);
+	menu_vram = psp_video_get_active_fb();
+	if (is_rom_loaded)
+		g_menubg_src_ptr = menu_vram;
 	g_screen_ptr = NULL;
 }
 
 /* start rendering a menu screen */
 void plat_video_menu_begin(void)
 {
-	g_menuscreen_ptr = psp_screen;
+	g_menuscreen_ptr = menu_screen;
 }
 
 /* display a completed menu screen */
 void plat_video_menu_end(void)
 {
+	sceKernelDcacheWritebackRange(menu_screen, 512*272*2);
+	sceGuStart(GU_DIRECT, guCmdList);
+	sceGuCopyImage(GU_PSM_5650, 0, 0, 480, 272, 512, menu_screen,
+		0, 0, 512, menu_vram);
+	sceGuFinish();
+	sceGuSync(0, 0);
 	g_menuscreen_ptr = NULL;
-	psp_video_flip(1);
+	sceDisplaySetFrameBuf(menu_vram, 512, PSP_DISPLAY_PIXEL_FORMAT_565,
+		PSP_DISPLAY_SETBUF_IMMEDIATE);
 }
 
 /* terminate menu display */

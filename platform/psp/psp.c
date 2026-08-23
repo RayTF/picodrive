@@ -217,7 +217,18 @@ void psp_video_flip(int wait_vsync)
 
 void *psp_video_get_active_fb(void)
 {
-	return (void *)((unsigned long)psp_screen ^ (VRAMOFFS_FB1 ^ VRAMOFFS_FB0));
+	void *framebuf = NULL;
+	int bufferwidth = -1, pixelformat = -1;
+	int ret;
+
+	ret = sceDisplayGetFrameBuf(&framebuf, &bufferwidth, &pixelformat,
+		PSP_DISPLAY_SETBUF_IMMEDIATE);
+	if (ret < 0 || framebuf == NULL)
+		framebuf = (void *)((unsigned long)psp_screen ^
+			(VRAMOFFS_FB1 ^ VRAMOFFS_FB0));
+
+	/* Always use the uncached VRAM alias for CPU rendering. */
+	return (void *)((unsigned long)framebuf | 0x40000000);
 }
 
 void psp_msleep(int ms)
@@ -379,5 +390,3 @@ void lprintf(const char *fmt, ...)
 	logfd = -1;
 #endif
 }
-
-

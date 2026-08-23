@@ -41,9 +41,11 @@ static const char *rom_exts[] = {
 	"pco", "smd", "gen", "md",
 	"iso", "cso", "cue", "chd",
 	"32x",
-	"sms",
+	"sms", "gg",
 	NULL
 };
+
+static int romsel_extra_mode;
 
 // rrrr rggg gggb bbbb
 static unsigned short fname2color(const char *fname)
@@ -69,6 +71,7 @@ static unsigned short fname2color(const char *fname)
 
 static const char *men_dummy[] = { NULL };
 static int menu_w, menu_h;
+static int menu_bg_mode = -1;
 
 /* platform specific options and handlers */
 #if   defined(__GP2X__)
@@ -147,56 +150,47 @@ static void copy_bg(int dir)
 	}
 }
 
-static void menu_draw_prep(void)
+static void menu_load_background(const char *name, int mode)
 {
-	if (menu_w == g_menuscreen_w && menu_h == g_menuscreen_h)
+	int pos;
+	char buff[256];
+
+	if (menu_w == g_menuscreen_w && menu_h == g_menuscreen_h &&
+		menu_bg_mode == mode)
 		return;
 	menu_w = g_menuscreen_w, menu_h = g_menuscreen_h;
+	menu_bg_mode = mode;
+	pos = plat_get_skin_dir(buff, sizeof(buff));
+	strcpy(buff + pos, name);
 
-	if (PicoGameLoaded)
-	{
-		make_bg(0, 0);
-	}
-
-	else
-	{
-		int pos;
-		char buff[256];
-		pos = plat_get_skin_dir(buff, 256);
-		strcpy(buff + pos, "background.png");
-
-		// should really only happen once, on startup..
+	memset(g_menubg_ptr, 0, g_menuscreen_w * g_menuscreen_h * 2);
+	if (readpng(g_menubg_ptr, buff, READPNG_BG,
+			g_menuscreen_w, g_menuscreen_h) < 0)
 		memset(g_menubg_ptr, 0, g_menuscreen_w * g_menuscreen_h * 2);
-		if (readpng(g_menubg_ptr, buff, READPNG_BG,
-						g_menuscreen_w, g_menuscreen_h) < 0)
-			memset(g_menubg_ptr, 0, g_menuscreen_w * g_menuscreen_h * 2);
+}
+
+static void menu_draw_prep(void)
+{
+	if (!PicoGameLoaded) {
+		menu_load_background("background.png", 0);
+		return;
 	}
+	if (menu_w == g_menuscreen_w && menu_h == g_menuscreen_h &&
+		menu_bg_mode == 1)
+		return;
+	menu_w = g_menuscreen_w, menu_h = g_menuscreen_h;
+	menu_bg_mode = 1;
+	make_bg(0, 0);
+}
+
+static void menu_draw_prep_title(void)
+{
+	menu_load_background("background_title.png", 0);
 }
 
 static void menu_draw_prep_selector(void)
 {
-	if (menu_w == g_menuscreen_w && menu_h == g_menuscreen_h)
-		return;
-	menu_w = g_menuscreen_w, menu_h = g_menuscreen_h;
-
-	if (PicoGameLoaded)
-	{
-		make_bg(0, 0);
-	}
-
-	else
-	{
-		int pos;
-		char buff[256];
-		pos = plat_get_skin_dir(buff, 256);
-		strcpy(buff + pos, "background_selector.png");
-
-		// should really only happen once, on startup..
-		memset(g_menubg_ptr, 0, g_menuscreen_w * g_menuscreen_h * 2);
-		if (readpng(g_menubg_ptr, buff, READPNG_BG,
-						g_menuscreen_w, g_menuscreen_h) < 0)
-			memset(g_menubg_ptr, 0, g_menuscreen_w * g_menuscreen_h * 2);
-	}
+	menu_load_background("background_selector.png", 2);
 }
 
 static void draw_savestate_bg(int slot)
@@ -224,6 +218,7 @@ static void menu_enter(int is_rom_loaded)
 {
 	plat_video_menu_enter(is_rom_loaded);
 	menu_w = menu_h = 0;
+	menu_bg_mode = -1;
 	menu_draw_prep();
 }
 
@@ -275,7 +270,7 @@ static void cdload_progress_cb(const char *fname, int percent)
 void menu_romload_prepare(const char *rom_name)
 {
 	const char *p = rom_name + strlen(rom_name);
-
+	menu_draw_prep(); // Draw regular background
 	while (p > rom_name && *p != '/')
 		p--;
 
@@ -986,6 +981,7 @@ static menu_entry e_menu_options[] =
 	mee_cust      ("Region",                   MA_OPT_REGION,        mh_opt_misc, mgn_opt_region),
 	mee_range     ("",                         MA_OPT_CPU_CLOCKS,    currentConfig.CPUclock, 20, 3200),
 	mee_range_h   ("Hotkey save/load slot",    MA_OPT_SAVE_SLOT,     state_slot, 0, 9, h_hotkeysvld),
+	mee_onoff     ("Autoload newest save",     MA_OPT_AUTOLOAD_SAVE, g_autostateld_opt, 1),
 	mee_handler   ("Configure controls",       menu_loop_keyconfig),
 	mee_label     (""),
 	mee_handler   ("Option profiles",          menu_loop_profile_options),
@@ -1010,6 +1006,7 @@ static int menu_loop_options(int id, int keys)
 {
 	static int sel = 0;
 
+	menu_draw_prep();
 	me_loop_d(e_menu_options, &sel, menu_draw_prep, NULL);
 
 	return 0;
@@ -1182,37 +1179,65 @@ static void debug_menu_loop(void)
 
 static void draw_frame_credits(void)
 {
-	smalltext_out16(4, 1, "build: " __DATE__ " " __TIME__, PXMAKE(0xe0, 0xff, 0xe0));
 }
 
 static const char credits[] =
-	"PicoDrive v" VERSION "\n"
-	"(c) notaz, 2006-2013; irixxxx, 2018-2024\n\n"
-	"Credits:\n"
-	"fDave: initial code\n"
-#ifdef EMU_C68K
-	"      Cyclone 68000 core\n"
-#else
-	"Stef, Chui: FAME/C 68k core\n"
-#endif
-#ifdef _USE_DRZ80
-	"Reesy & FluBBa: DrZ80 core\n"
-#else
-	"Stef, NJ: CZ80 core\n"
-#endif
-	"MAME devs: SH2, YM2612 and SN76496 cores\n"
-	"Eke, Stef: some Sega CD code\n"
-	"Inder, ketchupgun: graphics\n"
-#ifdef __GP2X__
-	"Squidge: mmuhack\n"
-	"Dzz: ARM940 sample\n"
-#endif
+	"VectorDrive (Formerly SUGC-PSP)\n"
+	"Copyleft 2024-20XX RaySollium99\n"
+	"vectordrive.sollium.net\n"
 	"\n"
-	"special thanks (for docs, ideas):\n"
-	" Charles MacDonald, Haze,\n"
-	" Stephane Dallongeville,\n"
-	" Lordus, Exophase, Rokas,\n"
-	" Eke, Nemesis, Tasco Deluxe";
+	"Credits:\n"
+	"PicoDrive: Base Project\n"
+	"PPSSPP: Emulation Testing\n"
+	"aCubeOne: Early Code Help\n"
+	"HydraPander: Testing\n"
+	"HarleySkySaphri: Motivation\n"
+	"\n"
+	"\n"
+	"A project brought to you\n"
+	"by the autism of RaySollium99\n"
+	"raysollium99.com // sollium.net\n";
+
+static void menu_loop_credits(void)
+{
+	menu_draw_prep();
+	draw_menu_message(credits, draw_frame_credits);
+	in_menu_wait(PBTN_MOK|PBTN_MBACK, NULL, 70);
+}
+
+static int romsel_extra_action(int action)
+{
+	if (action & PBTN_MA2)
+		menu_loop_credits();
+	return 0;
+}
+
+static int menu_loop_extra_games(void)
+{
+	char extra_path[512] = "rom_extra/";
+	const char *ret_name;
+
+	if (!plat_is_dir(extra_path)) {
+		menu_draw_prep_selector();
+		draw_menu_message("rom_extra/ directory not found", NULL);
+		while (in_menu_wait_any(NULL, 50) & (PBTN_MOK|PBTN_MBACK))
+			;
+		in_menu_wait(PBTN_MOK|PBTN_MBACK, NULL, 70);
+		return 0;
+	}
+
+	romsel_extra_mode = 1;
+	ret_name = menu_loop_romsel_d(extra_path, sizeof(extra_path), rom_exts,
+		NULL, menu_draw_prep_selector, romsel_extra_action);
+	romsel_extra_mode = 0;
+	if (ret_name == NULL)
+		return 0;
+
+	lprintf("selected extra file: %s\n", ret_name);
+	rom_fname_reload = ret_name;
+	engineState = PGS_ReloadRom;
+	return 1;
+}
 
 static void menu_main_draw_status(void)
 {
@@ -1264,204 +1289,195 @@ static void menu_main_draw_status(void)
 			bp[(w - i) + g_menuscreen_pp * u] = menu_text_color;
 }
 
-static menu_entry e_menu_main[];
-
-static int main_menu_handler(int id, int keys)
+static void menu_bgm_play(void)
 {
-	const char *ret_name;
+	char buff[256];
+	int pos;
 
-	switch (id)
-	{
-	case MA_MAIN_RESUME_GAME:
-		if (PicoGameLoaded)
-			return 1;
-		break;
-	case MA_MAIN_SAVE_STATE:
-		if (PicoGameLoaded)
-			return menu_loop_savestate(0);
-		break;
-	case MA_MAIN_LOAD_STATE:
-		if (PicoGameLoaded)
-			return menu_loop_savestate(1);
-		break;
-	case MA_MAIN_RESET_GAME:
-		if (PicoGameLoaded) {
-			emu_reset_game();
-			return 1;
-		}
-		break;
-	case MA_MAIN_LOAD_ROM:
-		menu_w = menu_h = 0;
-		rom_fname_reload = NULL;
-		ret_name = menu_loop_romsel_d(rom_fname_loaded,
-			sizeof(rom_fname_loaded), rom_exts, NULL, menu_draw_prep_selector);
-		if (ret_name != NULL) {
-			lprintf("selected file: %s\n", ret_name);
-			rom_fname_reload = ret_name;
-			engineState = PGS_ReloadRom;
-			return 1;
-		}
-		break;
-	case MA_MAIN_CHANGE_CD:
-		if (PicoIn.AHW & PAHW_MCD) {
-			// if cd is loaded, cdd_unload() triggers eject and
-			// returns 1, else we'll select and load new CD here
-			if (!cdd_unload())
-				menu_loop_tray();
-			return 1;
-		}
-		break;
-	case MA_MAIN_CREDITS:
-		draw_menu_message(credits, draw_frame_credits);
-		in_menu_wait(PBTN_MOK|PBTN_MBACK, NULL, 70);
-		break;
-	case MA_MAIN_EXIT:
-		engineState = PGS_Quit;
-		return 1;
-	case MA_MAIN_PATCHES:
-		if (PicoGameLoaded && PicoPatches) {
-			menu_loop_patches();
-			PicoPatchApply();
-			menu_update_msg("Patches applied");
-		}
-		break;
-	default:
-		lprintf("%s: something unknown selected\n", __FUNCTION__);
-		break;
+	if (!(currentConfig.EmuOpt & EOPT_EN_MENUBGM))
+		return;
+	pos = plat_get_skin_dir(buff, sizeof(buff));
+	strcpy(buff + pos, "retro_dreams.mp3");
+	bgm_play(buff);
+}
+
+static void draw_title_screen(void)
+{
+	const char *prompt = "Press START button to begin";
+	int x = (g_menuscreen_w - strlen(prompt) * me_mfont_w) / 2;
+
+	menu_draw_begin(1, 1);
+	text_out16(x, 205, "%s", prompt);
+	menu_draw_end();
+}
+
+static void menu_loop_title(void)
+{
+	menu_w = menu_h = 0;
+	menu_bg_mode = -1;
+	menu_draw_prep_title();
+	draw_title_screen();
+	while (in_menu_wait_any(NULL, 50) & PBTN_MSTART)
+		;
+	while (!(in_menu_wait(PBTN_MSTART, NULL, 70) & PBTN_MSTART))
+		;
+	while (in_menu_wait_any(NULL, 50) & PBTN_MSTART)
+		;
+}
+
+static int romsel_menu_action(int action)
+{
+	if (action & PBTN_MA3) {
+		menu_loop_options(0, 0);
+		emu_write_config(0);
 	}
-
+	else if (action & PBTN_MA2) {
+		menu_loop_extra_games();
+	}
+	if (engineState != PGS_Menu)
+		return 1;
+	menu_w = menu_h = 0;
+	menu_bg_mode = -1;
+	menu_draw_prep_selector();
 	return 0;
 }
 
-static const char *mgn_picopage(int id, int *offs)
+static int menu_loop_selector(void)
 {
-	strcpy(static_buff, "   ");
-	sprintf(static_buff, "%i", PicoPicohw.page);
-	return static_buff;
-}
+	const char *ret_name;
 
-static int mh_picopage(int id, int keys)
-{
-	if (keys & (PBTN_LEFT|PBTN_RIGHT)) { // multi choice
-		PicoPicohw.page += (keys & PBTN_LEFT) ? -1 : 1;
-		if (PicoPicohw.page < 0) PicoPicohw.page = 6;
-		else if (PicoPicohw.page > 6) PicoPicohw.page = 0;
+	menu_w = menu_h = 0;
+	menu_bg_mode = -1;
+	rom_fname_reload = NULL;
+	ret_name = menu_loop_romsel_d(rom_fname_loaded,
+		sizeof(rom_fname_loaded), rom_exts, NULL, menu_draw_prep_selector,
+		romsel_menu_action);
+	if (ret_name == NULL)
 		return 0;
-	}
+
+	lprintf("selected file: %s\n", ret_name);
+	rom_fname_reload = ret_name;
+	engineState = PGS_ReloadRom;
 	return 1;
 }
 
-static const char *mgn_saveloadcfg(int id, int *offs)
-{
-	strcpy(static_buff, "   ");
-	if (config_slot != 0)
-		sprintf(static_buff, "[%i]", config_slot);
-	return static_buff;
-}
-
-static int mh_saveloadcfg(int id, int keys)
-{
-	int ret;
-
-	if (keys & (PBTN_LEFT|PBTN_RIGHT)) { // multi choice
-		config_slot += (keys & PBTN_LEFT) ? -1 : 1;
-		if (config_slot < 0) config_slot = 9;
-		else if (config_slot > 9) config_slot = 0;
-		me_enable(e_menu_main, MA_OPT_LOADCFG, PicoGameLoaded && config_slot != config_slot_current);
-		return 0;
-	}
-
-	switch (id) {
-	case MA_OPT_SAVECFG:
-	case MA_OPT_SAVECFG_GAME:
-		if (emu_write_config(id == MA_OPT_SAVECFG_GAME ? 1 : 0))
-			menu_update_msg("config saved");
-		else
-			menu_update_msg("failed to write config");
-		break;
-	case MA_OPT_LOADCFG:
-		ret = emu_read_config(rom_fname_loaded, 1);
-		if (!ret) ret = emu_read_config(NULL, 1);
-		if (ret)  menu_update_msg("config loaded");
-		else      menu_update_msg("failed to load config");
-		break;
-	default:
-		return 0;
-	}
-
-	return 1;
-}
-
-static const char h_saveload[] = "Game options are overloading global options";
-
-static menu_entry e_menu_main[] =
-{
-	mee_label     (""),
-	mee_label     (""),
-	mee_label     (""),
-	mee_label     (""),
-	mee_label     (""),
-	mee_label     (""),
-	mee_label     (""),
-	mee_label     (""),
-	mee_label     (""),
-	mee_handler_id("Resume Game",        MA_MAIN_RESUME_GAME, main_menu_handler),
-	mee_handler_id("Save Game",         MA_MAIN_SAVE_STATE,  main_menu_handler),
-	mee_handler_id("Load Game",         MA_MAIN_LOAD_STATE,  main_menu_handler),
-	mee_handler_id("Reset Game",         MA_MAIN_RESET_GAME,  main_menu_handler),
-	mee_handler_id("Change CD",          MA_MAIN_CHANGE_CD,   main_menu_handler),
-	mee_cust_s_h  ("Storyware page",     MA_MAIN_PICO_PAGE, 0,mh_picopage, mgn_picopage, NULL),
-	mee_handler_id("Patches / GameGenie",MA_MAIN_PATCHES,     main_menu_handler),
-	mee_handler_id("Press CIRCLE button to begin",      MA_MAIN_LOAD_ROM,    main_menu_handler),
-	mee_cust_s_h  ("Save Game Options",  MA_OPT_SAVECFG_GAME, 0, mh_saveloadcfg, mgn_saveloadcfg, h_saveload),
-	mee_cust_s_h  ("Load Game Options",  MA_OPT_LOADCFG, 0,   mh_saveloadcfg, mgn_saveloadcfg, h_saveload),
-	mee_end,
+static const char *pause_items[] = {
+	"Resume Game",
+	"Control Setup",
+	"Save Game",
+	"Load Game",
+	"Reset Game",
+	"Exit Game",
 };
+
+static void draw_pause_menu(int sel)
+{
+	const int panel_x = 117, panel_y = 45, panel_w = 242, panel_h = 190;
+	const int item_y = 105, item_step = 14;
+	int i, x;
+
+	menu_draw_begin(1, 1);
+	menu_draw_frame(75, 7, 330, 258, PXMAKE(0xff, 0xea, 0x18));
+	menu_draw_frame(76, 8, 328, 256, PXMAKE(0xd8, 0xc8, 0x08));
+	menu_draw_rect(panel_x, panel_y, panel_w, panel_h, PXMAKE(0x08, 0x08, 0x0d));
+	menu_draw_frame(panel_x, panel_y, panel_w, panel_h, PXMAKE(0x70, 0x74, 0x78));
+	menu_draw_frame(panel_x + 2, panel_y + 2, panel_w - 4, panel_h - 4,
+		PXMAKE(0x20, 0x22, 0x26));
+	text_out16(panel_x + 13, panel_y + 8, "PAUSE");
+	x = (g_menuscreen_w - strlen("Controller 1") * me_mfont_w) / 2;
+	text_out16(x, panel_y + 37, "Controller 1");
+
+	menu_draw_rect(174, item_y + sel * item_step - 2, 132, 12,
+		PXMAKE(0x68, 0x70, 0x72));
+	menu_draw_frame(174, item_y + sel * item_step - 2, 132, 12,
+		PXMAKE(0xc0, 0xc8, 0xc8));
+	for (i = 0; i < array_size(pause_items); i++) {
+		x = (g_menuscreen_w - strlen(pause_items[i]) * me_mfont_w) / 2;
+		text_out16(x, item_y + i * item_step, "%s", pause_items[i]);
+	}
+
+	smalltext_out16(panel_x + 38, panel_y + panel_h - 25,
+		"CIRCLE Select", PXMAKE(0xff, 0xff, 0xff));
+	smalltext_out16(panel_x + 161, panel_y + panel_h - 25,
+		"CROSS Back", PXMAKE(0xff, 0xff, 0xff));
+	menu_draw_end();
+}
+
+static void menu_loop_pause(void)
+{
+	static int sel;
+	int done = 0, inp;
+
+	menu_draw_prep();
+	draw_pause_menu(sel);
+	while (in_menu_wait_any(NULL, 50) & (PBTN_MOK|PBTN_MBACK|PBTN_MENU))
+		;
+	while (!done && PicoGameLoaded) {
+		draw_pause_menu(sel);
+		inp = in_menu_wait(PBTN_UP|PBTN_DOWN|PBTN_MOK|PBTN_MBACK|PBTN_MENU,
+			NULL, 70);
+		if (inp & (PBTN_MBACK|PBTN_MENU))
+			break;
+		if (inp & PBTN_UP)
+			sel = sel > 0 ? sel - 1 : array_size(pause_items) - 1;
+		else if (inp & PBTN_DOWN)
+			sel = sel + 1 < array_size(pause_items) ? sel + 1 : 0;
+		else if (inp & PBTN_MOK) {
+			switch (sel) {
+			case 0:
+				done = 1;
+				break;
+			case 1:
+				menu_loop_keyconfig(0, 0);
+				break;
+			case 2:
+				done = menu_loop_savestate(0);
+				break;
+			case 3:
+				done = menu_loop_savestate(1);
+				break;
+			case 4:
+				emu_reset_game();
+				done = 1;
+				break;
+			case 5:
+				emu_unload_game();
+				done = 1;
+				break;
+			}
+			if (!done && PicoGameLoaded) {
+				menu_w = menu_h = 0;
+				menu_bg_mode = -1;
+				menu_draw_prep();
+			}
+		}
+	}
+}
 
 void menu_loop(void)
 {
-	static int sel = 0;
-
-
-
-	me_enable(e_menu_main, MA_MAIN_RESUME_GAME, PicoGameLoaded);
-	me_enable(e_menu_main, MA_MAIN_SAVE_STATE,  PicoGameLoaded);
-	me_enable(e_menu_main, MA_MAIN_LOAD_STATE,  PicoGameLoaded);
-	me_enable(e_menu_main, MA_MAIN_RESET_GAME,  PicoGameLoaded);
-	me_enable(e_menu_main, MA_MAIN_CHANGE_CD,   PicoIn.AHW & PAHW_MCD);
-	me_enable(e_menu_main, MA_MAIN_PICO_PAGE,   PicoIn.AHW & PAHW_PICO);
-	me_enable(e_menu_main, MA_MAIN_PATCHES,     PicoPatches != NULL);
-	me_enable(e_menu_main, MA_OPT_SAVECFG_GAME, PicoGameLoaded);
-	me_enable(e_menu_main, MA_OPT_LOADCFG,      PicoGameLoaded && config_slot != config_slot_current);
-
-	lprintf("menu_loop: enter, EmuOpt=0x%08X (MENUBGM=%d)\n",
-		currentConfig.EmuOpt, !!(currentConfig.EmuOpt & EOPT_EN_MENUBGM));
-
-	if (currentConfig.EmuOpt & EOPT_EN_MENUBGM) {
-		char buff[256];
-		int pos = plat_get_skin_dir(buff, sizeof(buff));
-		strcpy(buff + pos, "retro_dreams.mp3");
-		lprintf("menu_loop: calling bgm_play('%s')\n", buff);
-		int ret = bgm_play(buff);
-		lprintf("menu_loop: bgm_play returned %d\n", ret);
-	}
-
 	menu_enter(PicoGameLoaded);
 	in_set_config_int(0, IN_CFG_BLOCKING, 1);
-	me_loop_d(e_menu_main, &sel, menu_draw_prep_selector, menu_main_draw_status);
 
-	if (PicoGameLoaded) {
-		if (engineState == PGS_Menu)
-			engineState = PGS_Running;
-		/* wait until menu, ok, back is released */
-		while (in_menu_wait_any(NULL, 50) & (PBTN_MENU|PBTN_MOK|PBTN_MBACK))
-			;
+	if (PicoGameLoaded)
+		menu_loop_pause();
+	if (!PicoGameLoaded && engineState == PGS_Menu) {
+		menu_bgm_play();
+		while (!PicoGameLoaded && engineState == PGS_Menu) {
+			menu_loop_title();
+			if (menu_loop_selector())
+				break;
+		}
 	}
 
-	if (engineState == PGS_Running || engineState == PGS_ReloadRom || engineState == PGS_RestartRun) {
-		lprintf("menu_loop: exiting menu to run emulation, stopping BGM\n");
+	if (PicoGameLoaded && engineState == PGS_Menu)
+		engineState = PGS_Running;
+	while (in_menu_wait_any(NULL, 50) &
+		(PBTN_MENU|PBTN_MOK|PBTN_MBACK|PBTN_MSTART))
+		;
+	if (engineState == PGS_Running || engineState == PGS_ReloadRom ||
+		engineState == PGS_RestartRun)
 		bgm_stop();
-	}
 
 	in_set_config_int(0, IN_CFG_BLOCKING, 0);
 	plat_video_menu_leave();
@@ -1475,7 +1491,7 @@ static int mh_tray_load_cd(int id, int keys)
 
 	rom_fname_reload = NULL;
 	ret_name = menu_loop_romsel_d(rom_fname_loaded,
-			sizeof(rom_fname_loaded), rom_exts, NULL, menu_draw_prep);
+			sizeof(rom_fname_loaded), rom_exts, NULL, menu_draw_prep, NULL);
 	if (ret_name == NULL)
 		return 0;
 

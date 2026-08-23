@@ -26,6 +26,7 @@ srm/
 brm/
 mds/
 rom/
+rom_extra/
 cfg/
 libs/
 obj/
