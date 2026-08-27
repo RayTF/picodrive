@@ -1,18 +1,38 @@
+![VectorDrive Banner](website/public/banner.png)
 # VectorDrive
 
 A fork of PicoDrive for PSP, skinned to look like Sonic's Ultimate Genesis Collection
 
 ### Why?
 
-In 2019 (when i originally had this idea) i had just gotten a PSP, and in 2016-2020 i had a copy of Sonic's UGC on the Xbox 360, i knew that the PSP was very much powerful enough to run the same library of games, and this was on the back of my head until August of 2024, when i finally gained enough skill to make this into a reality.
+In 2019 (when i originally had this idea) i had just gotten a PSP, and in 2016-2020 i had a copy of Sonic's UGC on the Xbox 360, i knew that the PSP was very much powerful enough to run the same library of games, and this was on the back of my head until August of 2024, when i started this project, then realized it was too ambitious for my skills back then. **But now, in August of 2026, i have officially finished this project**
 
 **Fun Fact** - I did make a **terrible** version of this idea in 2019 with my limited brain, which i still have archived today, (i stretched the SUGC logo to fit on the PBP, changed the background which made the game list almost unreadable, and a few other horrible hacks), but, it didn't involve any source code. This time i'm doing it for real, redesigning the UI and open sourcing all of it
 
 ### Downloads
 
-Soon!
+#### 1. Pre-built with ROMs (Recommended)
 
-### To-do List
+1. Go to [vectordrive.sollium.net](https:/vectordrive.sollium.net) and click "Download"
+2. Select which variant you want (VectorDrive / Sonic's UGC / SEGA MDUC)
+3. Select what version you want (Memory Stick / ISO), then download it
+4. Copy that to your PSP or PS Vita like any other game
+5. Run it from the XMB! Enjoy!
+
+#### 2. Custom Version (VectorForge)
+
+1. Go to [vectordrive.sollium.net](https:/vectordrive.sollium.net) and click "Download"
+2. Select which variant you want (VectorDrive / Sonic's UGC / SEGA MDUC)
+3. Select "NoROM Edition" then download it
+4. Scroll down, find "VectorForge", then pick your platform (Windows / Linux)
+5. Run VectorForge, then hit "Add Folder" and select a folder with your SEGA ROMs
+6. Pick which library you want to add it to (main / extra). Do it twice if you want both.
+7. Click "Scrape", then type in your [ScreenScraper.fr](https://screenscraper.fr) credentials
+8. Wait until it's done. after that, go to "Builder", select the VectorDrive ZIP you downloaded
+9. Click "Build ZIP" and/or "Build ISO", and navigate to the folder where you saved it
+10. Copy that to your PSP or PS Vita like any other game, and run it from the XMB! Enjoy!
+
+### To-do List (Finished)
 
 | Done     | Feature               | Progress |
 |----------|-----------------------|----------|
@@ -25,30 +45,4 @@ Soon!
 | ✅ (M3)  | Theme Switching       | 100%     |
 | ✅ (M4)  | ROM Selector UI       | 100%     |
 | ✅ (M5)  | ROM Metadata UI       | 100%     |
-| ✳️ (V1)  | Customizer Tool       | 0%       |
-
-### Q&A
-
-**Q: Will you make this for the European version of Sonic's UGC (Sega Mega Drive Ultimate Collection // SEGA MDUC)?**
-A: Originally i wasn't going to, but after making a separate branch to do it, i'm definitely going to release it. Up-to-date Development builds will ALWAYS be based on SUGC though.
-
-**Q: Will you make a PS2 Port? It looks really similar to the PSP version!**
-A: Never. I haven't owned a PS2 since 2013 (when i was a fucking baby) and don't plan to.
-
-**Q: How can i add more games?**
-A: Download or compile the Memory Stick version, go to or create the "rom" directory and add your games there, the file format doesn't matter
-
-**Q: How do i compile on Windows?**
-A: Not supported. I haven't used Windows as my daily OS since 2021 and have no plans to go back. Modern Windows is terrible and i have no reason to switch back. Just use a Linux VM if you can't make the switch
-
-**Q: Does this work on PS Vita?**
-A: Yes, just use Adrenaline and you're good, both the ISO and Memory Stick versions should work with no problem.
-
-**Q: Does this work on PPSSPP?**
-A: Absolutely! I used PPSSPP for testing the dev builds and it works flawlessly, but if you're gonna emulate SEGA Genesis games on an emulator, just use a normal Sega Genesis emulator, this is largely intended for people who own a PSP or PS Vita console.
-
-**Q: How did you get an uncompressed version of the SUGC Intro and Soundtrack**
-A: I ripped them myself from the Xbox 360 and PS3 version, just extract the files from the ISO and you should be good.
-
-**Q: How did you figure out this really confusing source code?**
-A: I admit that the PicoDrive source code is *almost* unreadable, and i definitely wouldn't recommend it to a beginner, but even if you are total trash at C code like i am, if you know where to look, it's not that hard, 99% of the changes were in the UI and the PSP-specific code, not on the emulator itself, i'm pretty sure it's possible to port this to Windows/Linux/PS2, but i have no desire in doing it myself, i can provide all of the design files, [my DMs are always open](https://raythefox.pw), message me and i'll be glad to help.
+| ✅ (V1)  | Customizer Tool       | 100%     |

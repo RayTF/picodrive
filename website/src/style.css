@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+  
+  body {
+    background-color: #0D0E12;
+    color: #f1f5f9;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #0D0E12;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #272b38;
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #2D761E;
+  }
+}
+
+@layer components {
+  /* Glass card styling inspired by RPCS3 */
+  .glass-card {
+    background: rgba(20, 22, 29, 0.75);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .glass-card-hover {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .glass-card-hover:hover {
+    background: rgba(26, 29, 39, 0.85);
+    border-color: rgba(45, 118, 30, 0.4);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 30px -10px rgba(45, 118, 30, 0.2);
+  }
+
+  /* Centered button styles */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold text-white transition-all duration-200 bg-vectordrive hover:bg-vectordrive-alt active:scale-[0.98] shadow-glow-green hover:shadow-glow-green-lg cursor-pointer;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold text-slate-200 transition-all duration-200 bg-sollium-dark-surface hover:bg-sollium-dark-hover border border-sollium-dark-border hover:border-slate-600 active:scale-[0.98] cursor-pointer;
+  }
+
+  .btn-blue {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold text-white transition-all duration-200 bg-sega-blue hover:bg-sega-blue-light active:scale-[0.98] shadow-glow-blue hover:shadow-glow-blue-lg cursor-pointer;
+  }
+
+  .btn-red {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white transition-all duration-200 bg-sollium-red hover:bg-sollium-red-light active:scale-[0.98] shadow-glow-red cursor-pointer;
+  }
+}

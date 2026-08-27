@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=VectorForge
+Comment=Custom library builder for VectorDrive
+Exec=VectorForge
+Icon=vectorforge
+Categories=Utility;Game;
+Terminal=false

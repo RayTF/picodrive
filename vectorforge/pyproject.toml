@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vectorforge"
+version = "1.0.0"
+description = "GUI and CLI custom library builder for VectorDrive"
+requires-python = ">=3.10"
+dependencies = [
+    "Pillow==12.1.1",
+    "PySide6>=6.8",
+]
+
+[project.scripts]
+vectorforge = "vectorforge.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
